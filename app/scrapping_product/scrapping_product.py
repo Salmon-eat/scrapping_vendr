@@ -1,30 +1,9 @@
-import threading
 
-import requests
 from lxml import html
 
+from app.HEADERS import fetch_html
 from app.models import Product
 
-SESSION = requests.Session()
-
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/122.0.0.0 Safari/537.36",
-    "Accept-Language": "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7",
-}
-
-
-websites = [
-    "https://www.vendr.com/marketplace/mulesoft"
-]
-
-
-def fetch_html(url: str) -> str:
-    r = SESSION.get(url, headers=HEADERS, timeout=20)
-    r.raise_for_status()
-    return r.text
 
 
 def parse_product_name(tree) -> str:
@@ -37,7 +16,7 @@ def only_digits(element: str) -> str:
 
 
 def parse_product_median_price(tree) -> int|None:
-    median = tree.xpath("//text()[contains(., 'Median')]/following::text()[contains(., '$')][1]")
+    median = tree.xpath("//span[contains(text(), 'Median')]/following-sibling::text()")
     if median:
         price = only_digits(median[0])
         return int(price)
@@ -46,15 +25,11 @@ def parse_product_median_price(tree) -> int|None:
 
 
 def parse_low_high(tree) -> int|tuple:
-    low_node = tree.xpath("//*[normalize-space()='Low']")
-    if not low_node:
+    slider_container = tree.xpath("//div[contains(@class, '_rangeSlider')]")
+    if not slider_container:
         return None, None
 
-    grids = low_node[0].xpath("preceding::div[.//text()[contains(., '$')]][1]")
-    if not grids:
-        return None, None
-
-    prices = grids[0].xpath(".//text()[contains(., '$')]")
+    prices = slider_container[0].xpath(".//span[contains(text(), '$')]/text()")
     price_low, price_high = only_digits(prices[0]), only_digits(prices[1])
 
     if len(prices) >= 2:
@@ -69,39 +44,24 @@ def parse_description(tree):
     return desc[0].strip() if desc else None
 
 
-def scrape_product_page(url: str):
+def scrape_product_page(url: str, category_name):
     try:
         html_text = fetch_html(url)
         tree = html.fromstring(html_text)
-        prod = parse_product(tree)
-        print(prod)
+        prod = parse_product(tree, category_name)
         return prod
     except Exception as e:
         print(f"Error scraping {url}: {e}")
         return None
 
 
-def multithread_scraping():
-    threads = []
-    for url in websites:
-        thread = threading.Thread(target=scrape_product_page, args=(url,))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
-
-
-def parse_product(tree) -> Product:
+def parse_product(tree, category_name: str) -> Product:
     low, high = parse_low_high(tree)
     return Product(
         product_name=parse_product_name(tree),
+        category=category_name,
         low_price=low,
         median_price=parse_product_median_price(tree),
         high_price=high,
         description=parse_description(tree),
     )
-
-
-if __name__ == "__main__":
-    multithread_scraping()
