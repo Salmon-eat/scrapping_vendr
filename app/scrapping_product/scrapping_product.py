@@ -1,4 +1,5 @@
 import threading
+
 import requests
 from lxml import html
 
@@ -16,7 +17,7 @@ HEADERS = {
 
 
 websites = [
-    'https://www.vendr.com/marketplace/mulesoft'
+    "https://www.vendr.com/marketplace/mulesoft"
 ]
 
 
@@ -30,12 +31,21 @@ def parse_product_name(tree) -> str:
     name = tree.xpath("normalize-space((//h1)[1])")
     return name or None
 
-def parse_product_median_price(tree):
+
+def only_digits(element: str) -> str:
+    return "".join(s for s in element if s.isdigit())
+
+
+def parse_product_median_price(tree) -> int|None:
     median = tree.xpath("//text()[contains(., 'Median')]/following::text()[contains(., '$')][1]")
-    return median[0].strip() if median else None
+    if median:
+        price = only_digits(median[0])
+        return int(price)
+    else:
+        return None
 
 
-def parse_low_high(tree):
+def parse_low_high(tree) -> int|tuple:
     low_node = tree.xpath("//*[normalize-space()='Low']")
     if not low_node:
         return None, None
@@ -45,11 +55,12 @@ def parse_low_high(tree):
         return None, None
 
     prices = grids[0].xpath(".//text()[contains(., '$')]")
-    prices = [p.strip() for p in prices if p.strip()]
+    price_low, price_high = only_digits(prices[0]), only_digits(prices[1])
 
     if len(prices) >= 2:
-        return prices[0], prices[-1]
+        return int(price_low), int(price_high)
     return None, None
+
 
 def parse_description(tree):
     desc = tree.xpath(
