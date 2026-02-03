@@ -5,24 +5,31 @@ from lxml import html
 from app.HEADERS import fetch_html
 
 BASE = "https://www.vendr.com"
-CATEGORY_PATH = "/categories/it-infrastructure/api"
 
 
 def parse_category_name(category_tree) -> str:
     return category_tree.xpath("normalize-space((//h1)[1])") or None
 
 
-def product_links_generator() -> Generator[str, None, None]:
-    page = 1
-    while True:
-        page_url = f"{BASE}{CATEGORY_PATH}?page={page}"
-        tree = html.fromstring(fetch_html(page_url))
+def product_links_generator(url_categories) -> Generator[str, None, None]:
+    for url in url_categories:
+        url = url[:-1]
+        page = 1
+        while True:
 
-        links = tree.xpath("//a[contains(@href, '/marketplace/')]/@href")
-        if not links:
-            break
+            page_url = f"{BASE}{url}{page}"
+            html_content = fetch_html(page_url)
 
-        for href in links:
-            yield BASE + href
+            if html_content is None:
+                print(f"[INFO] No more pages for {url}. Stopping at page {page}")
+                break
+            tree = html.fromstring(html_content)
 
-        page += 1
+            links = tree.xpath("//a[contains(@href, '/marketplace/')]/@href")
+            if not links:
+                break
+
+            for href in links:
+                yield BASE + href
+
+            page += 1

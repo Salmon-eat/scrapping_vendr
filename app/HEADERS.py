@@ -11,7 +11,9 @@ HEADERS = {
 SESSION = requests.Session()
 
 
-def fetch_html(url: str) -> str:
+def fetch_html(url: str):
     r = SESSION.get(url, headers=HEADERS, timeout=20)
+    if r.status_code == 404:
+        return None
     r.raise_for_status()
     return r.text
