@@ -21,7 +21,6 @@ def product_links_generator(url_categories) -> Generator[str, None, None]:
             html_content = fetch_html(page_url)
 
             if html_content is None:
-                print(f"[INFO] No more pages for {url}. Stopping at page {page}")
                 break
             tree = html.fromstring(html_content)
 

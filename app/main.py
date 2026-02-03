@@ -1,10 +1,16 @@
-import threading
 import queue
+import threading
+
 from lxml import html
+
+from app.db import Base, SessionLocal, engine
 from app.HEADERS import fetch_html
 from app.scrapping_category.scrapping_category import categories
 from app.scrapping_product.scrapping_product import scrape_product_page
-from app.scrapping_products_category.scrapping_url_products import parse_category_name, product_links_generator
+from app.scrapping_products_category.scrapping_url_products import (
+    parse_category_name,
+    product_links_generator,
+)
 
 task_queue = queue.Queue(maxsize=100)
 db_queue = queue.Queue()
@@ -32,13 +38,24 @@ def worker():
 
 
 def db_writer():
-    while True:
-        product = db_queue.get()
-        if product is None:
-            db_queue.task_done()
-            break
-        print(f"Stored: {product}")
-        db_queue.task_done()
+    Base.metadata.create_all(bind=engine)
+    session = SessionLocal()
+    try:
+        while True:
+            product_data = db_queue.get()
+            if product_data is None:
+                db_queue.task_done()
+                break
+
+            try:
+                session.add(product_data)
+                session.commit()
+            except Exception as e:
+                session.rollback()
+            finally:
+                db_queue.task_done()
+    finally:
+        session.close()
 
 
 def main():

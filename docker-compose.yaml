@@ -1,11 +1,11 @@
 services:
   db:
     image: postgres:16
-    container_name: autoria_db
+    container_name: vendr_db
     environment:
-      POSTGRES_DB: autoria
-      POSTGRES_USER: autoria
-      POSTGRES_PASSWORD: autoria
+      POSTGRES_DB: vendr
+      POSTGRES_USER: vendr
+      POSTGRES_PASSWORD: vendr
       TZ: UTC
       PGTZ: UTC
     ports:
