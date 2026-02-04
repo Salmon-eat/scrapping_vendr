@@ -2,7 +2,6 @@ from typing import Generator
 
 from playwright.sync_api import sync_playwright
 
-
 BASE = "https://books.toscrape.com/"
 
 
@@ -19,8 +18,7 @@ def book_product_links_generator() -> Generator[str, None, None]:
                 response = browser_page.goto(page_url, timeout=15000)
                 if response.status != 200:
                     break
-                book_link = browser_page.locator(
-                    "h3 a").evaluate_all(
+                book_link = browser_page.locator("h3 a").evaluate_all(
                     "elements => elements.map(el => el.href)"
                 )
                 all_links.extend(book_link)
@@ -30,4 +28,3 @@ def book_product_links_generator() -> Generator[str, None, None]:
             except Exception as e:
                 print(f"An error occurred: {e}")
         browser.close()
-

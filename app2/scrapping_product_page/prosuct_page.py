@@ -1,15 +1,14 @@
-from playwright.sync_api import sync_playwright
-
 from app2.model import Book
 
-test_url = ["https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html"]
 ADD_BASE_URL = "https://books.toscrape.com/"
+
 
 def parce_title(browser_page):
     return browser_page.locator("h1").inner_text()
 
+
 def parce_category(browser_page):
-    pass
+    return browser_page.locator(".breadcrumb li").nth(2).inner_text().strip()
 
 
 def parce_price(browser_page):
@@ -17,54 +16,52 @@ def parce_price(browser_page):
     return float(text.replace("£", ""))
 
 
+convert = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5}
+
+
 def parce_rating(browser_page):
-    pass
+    rating_element = browser_page.locator(".product_main .star-rating").get_attribute(
+        "class"
+    )
+    rating_word = rating_element.replace("star-rating ", "")
+    return convert.get(rating_word, 0)
 
 
 def parce_stock_availability(browser_page):
-    pass
+    return (
+        browser_page.locator(".product_main .instock.availability").inner_text().strip()
+    )
 
 
 def parce_image_url(browser_page):
     url = browser_page.locator(".item.active img").get_attribute("src")
-    return  f"{ADD_BASE_URL}{url[6:]}"
+    return f"{ADD_BASE_URL}{url[6:]}"
 
 
 def parce_description(browser_page):
-    return browser_page.locator("//div[@id='product_description']/following-sibling::p").inner_text()
+    return browser_page.locator(
+        "//div[@id='product_description']/following-sibling::p"
+    ).inner_text()
+
 
 def parce_product_information(browser_page):
-    pass
+    result = {}
+    info = browser_page.locator("table.table-striped tr").all()
+    for text in info:
+        key = text.locator("th").inner_text().strip()
+        value = text.locator("td").inner_text().strip()
+        result[key] = value
+    return result
 
-
-
-def product_page():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        browser_page = browser.new_page()
-        try:
-            for url in test_url:
-                browser_page.goto(url, timeout=15000)
-                parce = parce_book(browser_page)
-                print(parce)
-                yield parce
-        except Exception as e:
-            print(f"Помилка парсингу: {type(e).__name__} - {e}")
-        finally:
-            browser.close()
 
 def parce_book(browser_page) -> Book:
     return Book(
-        title = parce_title(browser_page),
-        # category = parce_category(browser_page),
-        price = parce_price(browser_page),
-        # rating = parce_rating(browser_page),
-        # stock_availability = parce_stock_availability(browser_page),
-        image_url = parce_image_url(browser_page),
-        description = parce_description(browser_page),
-        # product_information = parce_product_information(browser_page),
+        title=parce_title(browser_page),
+        category=parce_category(browser_page),
+        price=parce_price(browser_page),
+        rating=parce_rating(browser_page),
+        stock_availability=parce_stock_availability(browser_page),
+        image_url=parce_image_url(browser_page),
+        description=parce_description(browser_page),
+        product_information=parce_product_information(browser_page),
     )
-
-if __name__ == "__main__":
-    for item in product_page():
-        pass

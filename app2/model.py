@@ -2,13 +2,12 @@ from dataclasses import dataclass
 
 
 @dataclass
-class Book():
+class Book:
     title: str
-    # category: str
+    category: str
     price: float
-    # rating: int
-    # stock_availability: str
+    rating: int
+    stock_availability: str
     image_url: str
     description: str
-    # product_information: str
-
+    product_information: dict
