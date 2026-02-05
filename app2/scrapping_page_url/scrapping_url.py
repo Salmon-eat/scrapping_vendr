@@ -1,5 +1,5 @@
 from typing import Generator
-
+from logging_config import logger
 from playwright.sync_api import sync_playwright
 
 BASE = "https://books.toscrape.com/"
@@ -9,7 +9,7 @@ def book_product_links_generator() -> Generator[str, None, None]:
     all_links = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         browser_page = browser.new_page()
         page = 1
         while True:
@@ -26,5 +26,5 @@ def book_product_links_generator() -> Generator[str, None, None]:
                     yield url
                 page += 1
             except Exception as e:
-                print(f"An error occurred: {e}")
+                logger.error(f"An error occurred: {e}")
         browser.close()

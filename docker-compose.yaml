@@ -1,33 +1,33 @@
 services:
   db:
-    image: postgres:16
-    container_name: toscrape_db
-    environment:
-      POSTGRES_DB: toscrape
-      POSTGRES_USER: toscrape
-      POSTGRES_PASSWORD: toscrape
-      TZ: UTC
-      PGTZ: UTC
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+      image: postgres:16
+      container_name: toscrape_db
+      ports:
+        - "5432:5432"
+      environment:
+        POSTGRES_DB: toscrape
+        POSTGRES_USER: toscrape
+        POSTGRES_PASSWORD: toscrape
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U toscrape -d toscrape"]
+        interval: 5s
+        timeout: 5s
+        retries: 5
 
   scraper:
-    build: .
-    container_name: toscrape_scraper
-    depends_on:
-      - db
-    environment:
-      - PYTHONPATH=/app
-      - DATABASE_URL=postgresql://toscrape:toscrape@db:5432/toscrape
-      - POSTGRES_USER=toscrape
-      - POSTGRES_PASSWORD=toscrape
-      - POSTGRES_DB=toscrape
-      - POSTGRES_HOST=db
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - .:/app
+      build: .
+      container_name: toscrape_scraper
+      working_dir: /app
+      depends_on:
+        db:
+          condition: service_healthy
+      environment:
+        - PYTHONPATH=/app
+        - POSTGRES_HOST=db
+        - PYTHONUNBUFFERED=1
+      command: python -u main.py
+      volumes:
+        - .:/app
 
 volumes:
   pgdata:

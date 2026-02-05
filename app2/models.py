@@ -1,5 +1,7 @@
+from dataclasses import dataclass
+
 from sqlalchemy import Column, Integer, String, Float, Text, JSON
-from db import Base
+from app2.db import Base
 
 class Book(Base):
     __tablename__ = "books"
@@ -13,3 +15,15 @@ class Book(Base):
     image_url = Column(Text)
     description = Column(Text)
     product_information = Column(JSON)
+
+
+@dataclass
+class BookData:
+    title: str
+    category: str
+    price: float
+    rating: int
+    stock_availability: str
+    image_url: str
+    description: str
+    product_information: dict
