@@ -12,6 +12,32 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vendr -d vendr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vendr_scraper
+    working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=vendr
+      - POSTGRES_USER=vendr
+      - POSTGRES_PASSWORD=vendr
+      - POSTGRES_PORT=5432
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - .:/app
+    command: python -u main.py
 
 volumes:
   pgdata:
