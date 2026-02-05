@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 
-from sqlalchemy import Column, Integer, String, Float, Text, JSON
+from sqlalchemy import JSON, Column, Float, Integer, String, Text
+
 from app2.db import Base
+
 
 class Book(Base):
     __tablename__ = "books"

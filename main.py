@@ -1,107 +1,113 @@
 import multiprocessing
-import queue
-import time
-from app2.db import SessionLocal, engine, Base
-from logging_config import logger
-from typing import List, Protocol
+from typing import Any, List
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
+from app2.db import Base, SessionLocal, engine
 from app2.models import Book
 from app2.scrapping_page_url.scrapping_url import book_product_links_generator
-from app2.scrapping_product_page.product_page import parce_book
-
-task_queue = queue.Queue(maxsize=100)
-db_queue = queue.Queue()
+from app2.scrapping_product_page.product_page import parse_book
+from logging_config import logger
 
 
+class ScraperWorker:
+    def __init__(self, db_queue: multiprocessing.Queue):
+        self.db_queue = db_queue
+
+    def runner(self, urls: List[str]) -> None:
+        with sync_playwright() as play:
+            browser = play.chromium.launch(headless=True)
+            context = browser.new_context()
+            page = browser.new_page()
+            for url in urls:
+                self._process_url(page, url)
+            context.close()
+            browser.close()
+
+    def _process_url(self, page: Page, url: str) -> None:
+        try:
+            page.goto(url, timeout=60000)
+            book = parse_book(page)
+            self.db_queue.put(book)
+        except Exception as e:
+            logger.error(f"Error on page: {url}: {e}")
 
 
-def worker(result, db_queue):
-    with sync_playwright() as play:
-        logger.info(f"Getting started: {len(result)} links")
-        browser = play.chromium.launch(headless=True)
-        context = browser.new_context()
-        page = browser.new_page()
-        for url in result:
-            try:
-                page.goto(url, timeout=60000)
-                book = parce_book(page)
-                logger.info(f"Successfully collected {book.title}")
-                db_queue.put(book)
-            except Exception as e:
-                logger.error(f"Error on page: {url}: {e}")
-        context.close()
-        browser.close()
+class PostgresBookWriter:
+    def __init__(self) -> None:
+        Base.metadata.create_all(bind=engine)
 
-def db_writer(db_queue):
-    Base.metadata.create_all(bind=engine)
-    session = SessionLocal()
+    def write(self, book_data: Book) -> None:
+        session = SessionLocal()
+        try:
+            session.merge(book_data)
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error SQL: {e}")
+        finally:
+            session.close()
+
+
+def db_writer_process(db_queue: Any) -> None:
     try:
+        writer = PostgresBookWriter()
         while True:
-            book_data = db_queue.get()
-            if book_data is None:
+            book = db_queue.get()
+            if book is None:
                 break
-            try:
-                existing_book = session.query(Book).filter(Book.title == book_data.title).first()
-                if existing_book:
-                    existing_book.price = book_data.price
-                    existing_book.description = book_data.description
-                    existing_book.stock_availability = book_data.stock_availability
-                else:
-                    session.add(book_data)
-                    session.commit()
-                logger.info(f"Entry confirmed: {book_data.title}")
-            except Exception as e:
-                logger.info(f"Error SQL: {e}")
-                session.rollback()
-            finally:
-                db_queue.task_done()
-    except Exception as e:
-        logger.error(f"Error on database: {e}")
-    finally:
-        session.close()
+            writer.write(book)
+            db_queue.task_done()
+    except Exception:
+        logger.error(f"Error proces in database")
 
 
+class ScraperDivisionWork:
+    def __init__(self, num_workers: int = 3):
+        self.num_workers = num_workers
+        self.manager = multiprocessing.Manager()
+        self.db_queue = self.manager.Queue(maxsize=100)
 
-def main(db_queue):
-    logger.info("Collected links")
-    all_urls = list(book_product_links_generator())
-    num_processes = 3
-    result = []
-    size = (len(all_urls) + num_processes - 1) // num_processes
-    for i in range(0, len(all_urls), size):
-        slice_list_url = all_urls[i : i + size]
-        result.append(slice_list_url)
+    def _split_urls(self, urls: List[str]) -> List[List[str]]:
+        result = []
+        total_urls = len(urls)
 
-    processes = []
-    for res in result:
-        p = multiprocessing.Process(target=worker, args=(res, db_queue))
-        p.start()
-        processes.append((p, res))
+        if total_urls == 0:
+            return result
 
-    while True:
-        active_processes = [p for p, chunk in processes if p.is_alive()]
-        if not active_processes:
-            break
-        for i, (p, chunk) in enumerate(processes):
-            if not p.is_alive() and p.exitcode != 0:
-                new_p = multiprocessing.Process(target=worker, args=(chunk,))
-                new_p.start()
-                processes[i] = (new_p, chunk)
-        time.sleep(5)
+        size = (total_urls + self.num_workers - 1) // self.num_workers
+
+        for i in range(0, total_urls, size):
+            slice_list_url = urls[i : i + size]
+            result.append(slice_list_url)
+
+        return result
+
+    def start(self) -> None:
+        logger.info("Starting")
+        urls = list(book_product_links_generator())
+        chunks = self._split_urls(urls)
+
+        writer_p = multiprocessing.Process(
+            target=db_writer_process, args=(self.db_queue,)
+        )
+        writer_p.start()
+
+        workers = []
+        for chunk in chunks:
+            worker_instance = ScraperWorker(self.db_queue)
+            p = multiprocessing.Process(target=worker_instance.runner, args=(chunk,))
+            p.start()
+            workers.append(p)
+
+        for p in workers:
+            p.join()
+
+        self.db_queue.put(None)
+        writer_p.join()
+        logger.info("Finished")
 
 
 if __name__ == "__main__":
-    manager = multiprocessing.Manager()
-    shared_db_queue = manager.Queue()
-    writer_process = multiprocessing.Process(target=db_writer, args=(shared_db_queue,))
-    writer_process.start()
-
-    try:
-        main(shared_db_queue)
-    finally:
-        shared_db_queue.put(None)
-        writer_process.join()
-        logger.info("Finish!")
-
+    orchestrator = ScraperDivisionWork(num_workers=3)
+    orchestrator.start()
